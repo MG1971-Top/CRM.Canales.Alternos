@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRM Prospectos Megacable</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background-color: #f8f9fa; }
+    .card { margin-bottom: 1rem; }
+    .high { background-color: #d4edda; }
+    .medium { background-color: #fff3cd; }
+    .low { background-color: #f8d7da; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <h1 class="mb-4">CRM Prospectos Megacable</h1>
+
+  <form id="prospect-form" class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Número de Vendedor</label>
+      <input type="text" class="form-control" id="vendedor" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Nombre del Prospecto</label>
+      <input type="text" class="form-control" id="nombre" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Dirección</label>
+      <input type="text" class="form-control" id="direccion" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Teléfono (10 dígitos)</label>
+      <input type="tel" pattern="\d{10}" class="form-control" id="telefono" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Paquete de Internet</label>
+      <select class="form-select" id="paquete" required>
+        <option value="100mb">100mb</option>
+        <option value="200mb">200mb</option>
+        <option value="300mb">300mb</option>
+        <option value="500mb">500mb</option>
+        <option value="1000mb">1000mb</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Tipo de Paquete</label>
+      <select class="form-select" id="tipoPaquete" required>
+        <option value="Doble">Doble</option>
+        <option value="Triple">Triple</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Prioridad</label>
+      <select class="form-select" id="prioridad" required>
+        <option value="Alta">Alta</option>
+        <option value="Media">Media</option>
+        <option value="Baja">Baja</option>
+      </select>
+    </div>
+    <div class="col-md-8">
+      <label class="form-label">Comentarios</label>
+      <input type="text" class="form-control" id="comentarios">
+    </div>
+    <div class="col-12">
+      <button type="submit" class="btn btn-primary">Agregar Prospecto</button>
+    </div>
+  </form>
+
+  <hr>
+
+  <div class="d-flex justify-content-between my-3">
+    <button class="btn btn-success" onclick="exportAllToPDF()">Exportar Todo a PDF</button>
+    <button class="btn btn-outline-secondary" onclick="exportToCSV()">Exportar Todo a Excel</button>
+    <button class="btn btn-danger" onclick="clearAllProspects()">Eliminar Todos</button>
+  </div>
+
+  <div class="mb-3">
+    <label for="filter-priority" class="form-label">Filtrar por Prioridad</label>
+    <select class="form-select" id="filter-priority" onchange="filterByPriority()">
+      <option value="">Todas</option>
+      <option value="Alta">Alta</option>
+      <option value="Media">Media</option>
+      <option value="Baja">Baja</option>
+    </select>
+  </div>
+
+  <canvas id="priorityChart" height="100"></canvas>
+
+  <div id="prospect-list" class="mt-4"></div>
+</div>
+
+<script>
+  let prospects = [];
+
+  function generateFolio() {
+    return (prospects.length + 1).toString().padStart(8, '0');
+  }
+
+  function saveProspects() {
+    localStorage.setItem('prospects', JSON.stringify(prospects));
+  }
+
+  function loadProspects() {
+    const saved = localStorage.getItem('prospects');
+    if (saved) {
+      prospects = JSON.parse(saved);
+      updateUI();
+    }
+  }
+
+  function filterByPriority() {
+    const filter = document.getElementById('filter-priority').value;
+    updateUI(filter);
+  }
+
+  document.getElementById('prospect-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    // Validación de campos
+    const vendedor = document.getElementById('vendedor').value;
+    const nombre = document.getElementById('nombre').value;
+    const direccion = document.getElementById('direccion').value;
+    const telefono = document.getElementById('telefono').value;
+
+    if (!vendedor || !nombre || !direccion || !telefono.match(/^\d{10}$/)) {
+      alert("Por favor completa todos los campos correctamente.");
+      return;
+    }
+
+    const prospect = {
+      folio: generateFolio(),
+      vendedor: vendedor,
+      nombre: nombre,
+      direccion: direccion,
+      telefono: telefono,
+      paquete: document.getElementById('paquete').value,
+      tipoPaquete: document.getElementById('tipoPaquete').value,
+      prioridad: document.getElementById('prioridad').value,
+      comentarios: document.getElementById('comentarios').value,
+      fecha: new Date().toLocaleString()
+    };
+
+    prospects.push(prospect);
+    saveProspects();
+    updateUI();
+    this.reset();
+  });
+
+  function updateUI(filter = '') {
+    const list = document.getElementById('prospect-list');
+    list.innerHTML = '';
+    const filteredProspects = filter ? prospects.filter(p => p.prioridad === filter) : prospects;
+    
+    filteredProspects.forEach((p, i) => {
+      const card = document.createElement('div');
+      card.className = `card ${p.prioridad.toLowerCase()}`;
+      card.innerHTML = `
+        <div class="card-body">
+          <h5 class="card-title">${p.nombre} - Folio: ${p.folio}</h5>
+          <p class="card-text">
+            <strong>Vendedor:</strong> ${p.vendedor}<br>
+            <strong>Dirección:</strong> ${p.direccion}<br>
+            <strong>Teléfono:</strong> ${p.telefono}<br>
+            <strong>Paquete:</strong> ${p.paquete}<br>
+            <strong>Tipo de Paquete:</strong> ${p.tipoPaquete}<br>
+            <strong>Prioridad:</strong> ${p.prioridad}<br>
+            <strong>Comentarios:</strong> ${p.comentarios}<br>
+            <strong>Fecha:</strong> ${p.fecha}
+          </p>
+          <button class="btn btn-danger btn-sm" onclick="deleteProspect(${i})"><i class="fas fa-trash"></i> Eliminar</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="exportToPDF(${i})"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
+        </div>`;
+      list.appendChild(card);
+    });
+    updateChart();
+  }
+
+  function deleteProspect(index) {
+    prospects.splice(index, 1);
+    saveProspects();
+    updateUI();
+  }
+
+  function clearAllProspects() {
+    prospects = [];
+    saveProspects();
+    updateUI();
+  }
+
+  function exportToPDF(index) {
+    const p = prospects[index];
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <h1>Registro de Prospecto</h1>
+      <p><strong>Folio:</strong> ${p.folio}<br>
+         <strong>Nombre:</strong> ${p.nombre}<br>
+         <strong>Vendedor:</strong> ${p.vendedor}<br>
+         <strong>Dirección:</strong> ${p.direccion}<br>
+         <strong>Teléfono:</strong> ${p.telefono}<br>
+         <strong>Paquete:</strong> ${p.paquete}<br>
+         <strong>Tipo de Paquete:</strong> ${p.tipoPaquete}<br>
+         <strong>Prioridad:</strong> ${p.prioridad}<br>
+         <strong>Comentarios:</strong> ${p.comentarios}<br>
+         <strong>Fecha:</strong> ${p.fecha}</p>`;
+    html2pdf(element);
+  }
+
+  function exportAllToPDF() {
+    const element = document.createElement('div');
+    element.innerHTML = `<h1>Listado de Prospectos</h1>`;
+    prospects.forEach(p => {
+      element.innerHTML += `
+        <p><strong>Folio:</strong> ${p.folio}<br>
+           <strong>Nombre:</strong> ${p.nombre}<br>
+           <strong>Vendedor:</strong> ${p.vendedor}<br>
+           <strong>Dirección:</strong> ${p.direccion}<br>
+           <strong>Teléfono:</strong> ${p.telefono}<br>
+           <strong>Paquete:</strong> ${p.paquete}<br>
+           <strong>Tipo de Paquete:</strong> ${p.tipoPaquete}<br>
+           <strong>Prioridad:</strong> ${p.prioridad}<br>
+           <strong>Comentarios:</strong> ${p.comentarios}<br>
+           <strong>Fecha:</strong> ${p.fecha}</p>`;
+    });
+    html2pdf(element);
+  }
+
+  function exportToCSV() {
+    const csv = 'Folio,Vendedor,Nombre,Dirección,Teléfono,Paquete,Tipo de Paquete,Prioridad,Comentarios,Fecha\n' +
+      prospects.map(p => 
+        `${p.folio},${p.vendedor},${p.nombre},${p.direccion},${p.telefono},${p.paquete},${p.tipoPaquete},${p.prioridad},${p.comentarios},${p.fecha}`
+      ).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'prospects.csv';
+    link.click();
+  }
+
+  function updateChart() {
+    const counts = { Alta: 0, Media: 0, Baja: 0 };
+    prospects.forEach(p => counts[p.prioridad]++);
+    
+    const ctx = document.getElementById('priorityChart').getContext('2d');
+    if (window.chart) window.chart.destroy();
+
+    window.chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['Alta', 'Media', 'Baja'],
+        datasets: [{
+          label: 'Número de Prospectos',
+          data: [counts.Alta, counts.Media, counts.Baja],
+          backgroundColor: ['#28a745', '#ffc107', '#dc3545']
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          title: {
+            display: true,
+            text: 'Distribución de Prospectos por Prioridad'
+          }
+        }
+      }
+    });
+  }
+
+  window.onload = loadProspects;
+</script>
+</body>
+</html>
